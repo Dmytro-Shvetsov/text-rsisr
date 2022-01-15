@@ -2,3 +2,7 @@ torch
 opencv-python
 pillow
 lmdb
+PyYAML
+albumentations
+tensorboard
+torchvision

@@ -1,0 +1,40 @@
+# global settings
+logs_dir: './lightning_logs'
+seed: 42
+
+# visualization settings
+visualizations_dir: 
+n_vis_images: 4
+vis_frequency: 30
+
+# dataset settings
+num_workers: 0
+dataset_dir: './data/text_zoom'
+hr_img_size: !!python/tuple [64, 256] # hxw
+scale_factor: 2
+val_split_complexity: easy
+test_split_complexity: medium
+shuffle: True
+
+norm_means: [0.0, 0.0, 0.0]
+norm_stds: [1.0, 1.0, 1.0]
+
+# train settings
+batch_size: 2
+optimizer: null
+scheduler: null
+
+ckpt_path: null
+
+model:
+  type: ESRGAN
+
+trainer:
+  type: pytorch_lightning.Trainer
+  max_steps: 50
+  max_epochs: 3
+  # gpus: 1
+  track_grad_norm: 2
+  log_every_n_steps: 50
+  precision: 32
+
