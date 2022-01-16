@@ -1,4 +1,5 @@
 from pathlib import Path
+from re import S
 
 import albumentations as albu
 import cv2
@@ -11,8 +12,16 @@ from src.datasets.text_zoom import ConcatDataset, TextZoomDataset
 from src.utils.config_reader import Config
 
 
-def denormalize(tensors, means, stds, max_value=1.0):
-    """ Denormalizes image tensors using mean and std """
+def denormalize(tensors, means, stds, max_value=255.0):
+    """
+    Denormalizes image tensors by the formula: `img = (img - mean * max_pixel_value) / (std * max_pixel_value)`
+    
+    (img - mean * max_pixel_value) / (std * max_pixel_value)
+    
+    inp *= (std * max_pixel_value)
+    inp += mean * max_pixel_value
+
+    """
     if not isinstance(means, torch.Tensor):
         means = torch.Tensor(means).type_as(tensors) * max_value
 
@@ -20,8 +29,7 @@ def denormalize(tensors, means, stds, max_value=1.0):
         stds = torch.Tensor(stds).type_as(tensors) * max_value
 
     for c in range(3):
-        tensors[:, c].mul_(max_value).mul_(stds[c]).add_(means[c])
-
+        tensors[:, c].mul_(stds[c]).add_(means[c])
     return torch.clamp(tensors, 0, max_value)
 
 
@@ -39,12 +47,12 @@ class LitDataModule(pl.LightningDataModule):
         self._lr_transforms = albu.Compose([
             albu.Resize(height // config.scale_factor, width // config.scale_factor, cv2.INTER_CUBIC),
             albu.ToFloat(),
-            albu.Normalize(config.norm_means, config.norm_stds),
+            albu.Normalize(config.norm_means, config.norm_stds, max_pixel_value=255.0), # outputs values in [0.; 1.] range
         ])
         self._hr_transforms = albu.Compose([
             albu.Resize(height, width, cv2.INTER_CUBIC),
             albu.ToFloat(),
-            albu.Normalize(config.norm_means, config.norm_stds),
+            albu.Normalize(config.norm_means, config.norm_stds), # outputs values in [0.; 1.] range
         ])
 
     def setup(self, stage):

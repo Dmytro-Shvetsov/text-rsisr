@@ -1,4 +1,5 @@
 import os
+import torch.nn.functional as F
 from pathlib import Path
 from typing import Any, Optional
 from pytorch_lightning.utilities.types import STEP_OUTPUT
@@ -9,7 +10,7 @@ from PIL import Image
 
 from src.datamodule import denormalize
 from src.utils.config_reader import Config
-
+from torchvision.utils import save_image, make_grid
 
 class EpochVisualizationCallback(Callback):
 
@@ -20,22 +21,30 @@ class EpochVisualizationCallback(Callback):
         self._n_vis_images = cfg.n_vis_images
         self._save_dir = Path(visualizations_dir)
         self._save_dir.mkdir(exist_ok=True, parents=True)
+        self.reset()
+
+    def reset(self):
+        for p in self._save_dir.glob('*.jpg'):
+            p.unlink(True)
 
     def build_vis_image(self, batch, model) -> None:
         x, y, _ = batch
 
         x, y = x[:self._n_vis_images], y[:self._n_vis_images]
         y_hat = model(x)
-        x = denormalize(x, self.cfg.norm_means, self.cfg.norm_stds, 255.0)
-        # Image.fromarray(x.permute(0, 2, 3, 1).byte().detach().numpy()[0]).save('test.jpg')
-        y = denormalize(y, self.cfg.norm_means, self.cfg.norm_stds, 255.0)
-        y_hat = denormalize(y_hat, self.cfg.norm_means, self.cfg.norm_stds, 255.0)
-        images_grid = torch.cat([torch.cat(items, axis=2) for items in zip(y, y_hat)], axis=1)
-        # self.logger.experiment.add_image('train/inference_example', images_grid, self.current_epoch)
-        return images_grid.permute(1, 2, 0).byte().numpy()
+
+        x = F.interpolate(x, scale_factor=self.cfg.scale_factor)
+
+        images_grid = torch.cat((x, y, y_hat), axis=-1)
+        images_grid = denormalize(images_grid, self.cfg.norm_means, self.cfg.norm_stds)
+        images_grid = make_grid(images_grid, nrow=1)
+        
+        # save_image(images_grid, 'test3.jpg')
+        images_grid.mul_(255).add_(0.5).clamp_(0, 255)
+        return images_grid.permute(1, 2, 0).byte().cpu().numpy()
 
     def on_train_batch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", outputs: STEP_OUTPUT, batch: Any, batch_idx: int, unused: Optional[int] = 0) -> None:
-        if batch_idx % self._freq:
+        if trainer.global_step % self._freq == 0:
             img = self.build_vis_image(batch, pl_module)
             save_fp = os.path.join(self._save_dir, 'train_step_{}_batch_{}.jpg'.format(
                 str(trainer.global_step).zfill(len(str(trainer.num_training_batches))),
@@ -44,7 +53,7 @@ class EpochVisualizationCallback(Callback):
             Image.fromarray(img).save(save_fp)
 
     def on_validation_batch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", outputs: Optional[STEP_OUTPUT], batch: Any, batch_idx: int, dataloader_idx: int) -> None:
-        if batch_idx % self._freq:
+        if batch_idx % self._freq == 0:
             img = self.build_vis_image(batch, pl_module)
             save_fp = os.path.join(self._save_dir, 'validation_step_{}_batch_{}.jpg'.format(
                 str(trainer.global_step).zfill(len(str(trainer.num_training_batches))),
