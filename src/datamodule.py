@@ -1,3 +1,4 @@
+from distutils.command.config import config
 from pathlib import Path
 from re import S
 
@@ -12,7 +13,7 @@ from src.datasets.text_zoom import ConcatDataset, TextZoomDataset
 from src.utils.config_reader import Config
 
 
-def denormalize(tensors, means, stds, max_value=255.0):
+def denormalize(tensors, means, stds, max_value=255.0) -> torch.Tensor:
     """
     Denormalizes image tensors by the formula: `img = (img - mean * max_pixel_value) / (std * max_pixel_value)`
     
@@ -33,7 +34,7 @@ def denormalize(tensors, means, stds, max_value=255.0):
     return torch.clamp(tensors, 0, max_value)
 
 
-class LitDataModule(pl.LightningDataModule):
+class DataModule:
     def __init__(self, config:Config):
         self._cfg = config
         self._root_dir = Path(self._cfg.dataset_dir)
@@ -43,19 +44,18 @@ class LitDataModule(pl.LightningDataModule):
         self._test_dst_dir = self._root_dir / 'test' / self._cfg.test_split_complexity
         self._train_dst, self._val_dst, self._test_dst = None, None, None
 
-        width, height = self._hr_img_size
         self._lr_transforms = albu.Compose([
-            albu.Resize(height // config.scale_factor, width // config.scale_factor, cv2.INTER_CUBIC),
+            albu.Resize(*config.lr_img_size, cv2.INTER_CUBIC),
             albu.ToFloat(),
             albu.Normalize(config.norm_means, config.norm_stds, max_pixel_value=255.0), # outputs values in [0.; 1.] range
         ])
         self._hr_transforms = albu.Compose([
-            albu.Resize(height, width, cv2.INTER_CUBIC),
+            albu.Resize(*config.hr_img_size, cv2.INTER_CUBIC),
             albu.ToFloat(),
             albu.Normalize(config.norm_means, config.norm_stds), # outputs values in [0.; 1.] range
         ])
 
-    def setup(self, stage):
+    def setup(self, stage=None):
         # called on every process in DDP
         if stage is None or stage == 'fit':
             train_splits = [TextZoomDataset(p, self._lr_transforms, self._hr_transforms) for p in self._train_dst_dirs]
@@ -68,20 +68,21 @@ class LitDataModule(pl.LightningDataModule):
     def train_dataloader(self):
         return DataLoader(self._train_dst, 
                           self._cfg.batch_size, 
-                          self._cfg.shuffle, 
+                          shuffle=True, 
                           num_workers=self._cfg.num_workers,
-                          pin_memory=True)
+                          pin_memory=True,
+                          drop_last=True)
 
     def val_dataloader(self):
         return DataLoader(self._val_dst, 
-                          self._cfg.batch_size, 
-                          self._cfg.shuffle, 
+                          batch_size=2, 
+                          shuffle=False, 
                           num_workers=self._cfg.num_workers,
                           pin_memory=True)
 
     def test_dataloader(self):
         return DataLoader(self._test_dst, 
-                          self._cfg.batch_size, 
+                          batch_size=2, 
                           shuffle=False, 
                           num_workers=self._cfg.num_workers,
                           pin_memory=True)

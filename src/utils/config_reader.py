@@ -1,5 +1,6 @@
 import pydoc
 from typing import Any
+from easydict import EasyDict
 
 import yaml
 
@@ -11,7 +12,7 @@ class Config:
 
     def load(self, file_path):
         with open(file_path, encoding='utf-8') as fid:
-            return yaml.load(fid, Loader=yaml.Loader)
+            return EasyDict(yaml.load(fid, Loader=yaml.Loader))
 
     def get(self, param_name, default=None):
         return self.__dict__.get(param_name, default)

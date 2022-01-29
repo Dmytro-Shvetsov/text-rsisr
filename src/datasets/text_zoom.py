@@ -44,13 +44,18 @@ class TextZoomDataset(Dataset):
 
         # indexation is expected to start from 1
         index += 1
+        # images = {}
         with self._env.begin(write=False) as txn:
             lr_img = self._get_image(txn, b'image_lr-%09d' % index)
+            # lr_img = np.array(Image.open('lr.png'))
+            # Image.fromarray(lr_img).save('lr.png')
             if self.lr_transforms:
                 lr_img = self.lr_transforms(image=lr_img)['image']
             lr_img = torch.from_numpy(lr_img).permute(2, 0, 1)
 
             hr_img = self._get_image(txn, b'image_hr-%09d' % index)
+            # hr_img = np.array(Image.open('lr.png'))
+            # Image.fromarray(hr_img).save('hr.png')
             if self.hr_transforms:
                 hr_img = self.hr_transforms(image=hr_img)['image']
             hr_img = torch.from_numpy(hr_img).permute(2, 0, 1)

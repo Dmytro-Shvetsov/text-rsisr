@@ -1,5 +1,7 @@
-from typing import Callable
+from collections import OrderedDict
+from typing import Callable, Dict, Tuple
 import cv2
+from sklearn.feature_extraction import image
 import torch
 import numpy as np
 import pytorch_lightning as pl
@@ -11,76 +13,88 @@ from src import models
 from src.datamodule import denormalize
 from src.models.core.esrgan.models import FeatureExtractor, GeneratorRRDB, Discriminator
 from src.utils.config_reader import Config, object_from_dict
-from src.models.base import SuperResolutionModelInterface
-from torchvision.transforms import Normalize
+from src.models.base import SuperResolutionModel
+from torchvision.transforms import Normalize, ToTensor, Compose, Resize, InterpolationMode
 
 
-class ESRGAN(pl.LightningModule, SuperResolutionModelInterface):
+class ESRGAN(SuperResolutionModel):
     def __init__(self, config:Config, **kwargs):
         super().__init__()
-
-        self.save_hyperparameters(ignore='kwargs')
         self.cfg = config
-        self._is_loaded = False
+        self.is_loaded = False
 
-        self.normalize = Normalize(config.norm_means, config.norm_stds)
-        self.generator = GeneratorRRDB(3, filters=64, num_res_blocks=kwargs.get('num_rrdb_blocks', 23), num_upsample=config.scale_factor - 1)
+        self.means, self.stds = torch.Tensor(config.norm_means).to(self.cfg.device), torch.Tensor(config.norm_stds).to(self.cfg.device)
+        self._prepr_op = Compose([
+            Resize(self.cfg.hr_img_size, InterpolationMode.BICUBIC),
+            ToTensor(),
+            Normalize(self.means, self.stds),
+        ])
+        scale_factor = config.hr_img_size[0] / config.lr_img_size[0]
+        self.generator = GeneratorRRDB(3, filters=64, num_res_blocks=kwargs.get('num_rrdb_blocks', 23), num_upsample=int(scale_factor) - 1)
         self.discriminator = Discriminator(input_shape=(3, *config.hr_img_size))
         self.feature_extractor = FeatureExtractor()
         # feature extractor stays in inference mode
         self.feature_extractor.eval()
-        self.load()
 
+        self.optimizer_G = torch.optim.Adam(self.generator.parameters(), lr=config.lr, betas=(0.5, 0.999))
+        self.optimizer_D = torch.optim.Adam(self.discriminator.parameters(), lr=config.lr, betas=(0.5, 0.999))
+
+        # Losses
         self.adv_loss = nn.BCEWithLogitsLoss()
         self.content_loss = nn.L1Loss()
         self.pixel_loss = nn.L1Loss()
         self.alpha_adv = 5e-3
         self.alpha_pixel = 1e-2
         self._warmup_iters = kwargs.get('warmup_iters', 500)
-        # Important: This property activates manual optimization.
-        self.automatic_optimization = False
+
+        self.global_step = 0
+
+    @property
+    def optimizers(self):
+        return self.optimizer_G, self.optimizer_D if self.training else []
+    
+    @property
+    def schedulers(self):
+        return []
 
     def load(self):
-        if self._is_loaded:
+        if self.is_loaded:
             return
         gen_ckpt, disc_ckpt = self.cfg.get('generator_ckpt'), self.cfg.get('discriminator_ckpt')
         if gen_ckpt:
             self.generator.load_state_dict(gen_ckpt)
         if disc_ckpt:
             self.discriminator.load_state_dict(disc_ckpt)
-        self._is_loaded = True
+        self.is_loaded = True
 
     def preprocess(self, images):
-        return images
+        if not isinstance(images, torch.Tensor):
+            images = torch.from_numpy(images, device=self.generator.device)
+        if torch.is_floating_point(images): # assumed that already normalized
+            return images
+        return self._prepr_op(images)
 
     def forward(self, x):
         return self.generator(x)
 
     def parse_outputs(self, outputs):
-        return outputs.int()
-
-    def configure_optimizers(self):
-        models = self.generator, self.discriminator
-        opts = [object_from_dict(optc, params=m.parameters()) for optc, m in zip(self.cfg.optimizers, models)]
-        schs = [object_from_dict(schc, optimizer=opt) for schc, opt in zip(self.cfg.schedulers, opts)]
-        return opts, schs
+        return denormalize(outputs, self.means, self.stds).mul_(255).add_(0.5).byte()
 
     def train(self, mode: bool = True):
         ret = super().train(mode)
         self.feature_extractor.eval()
         return ret
 
-    def generator_step(self, batch):
+    def generator_step(self, batch) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, float]]:
         x, y, _ = batch
         valid = torch.ones((x.size(0), *self.discriminator.output_shape), requires_grad=False).type_as(x)
         # self.generator.train()
         # print(self.generator.training)
         fake_imgs = self(x)
-        # 
-        # print(x.max(), y.max(), fake_imgs.max())
+
         pixel_loss = self.pixel_loss(fake_imgs, y)
-        if self.global_step >= self._warmup_iters:
-            return pixel_loss, fake_imgs
+        if self.global_step < self._warmup_iters:
+            return pixel_loss, fake_imgs, {'loss_G_pixel': pixel_loss.item()}
 
         # optimize the generator to make discriminator think the fake samples are real
         real_preds = self.discriminator(y).detach()
@@ -93,9 +107,15 @@ class ESRGAN(pl.LightningModule, SuperResolutionModelInterface):
         content_loss = self.content_loss(fake_feats, real_feats)
         
         gen_loss = self.alpha_pixel * pixel_loss + self.alpha_adv * adv_loss + content_loss
-        return gen_loss, fake_imgs
 
-    def discriminator_step(self, batch, fake_imgs):
+        logs = OrderedDict((
+            ('loss_G', gen_loss.item()),
+            ('loss_G_pixel', pixel_loss.item()),
+            ('loss_G_content', content_loss.item()),
+        ))
+        return gen_loss, fake_imgs, logs
+
+    def discriminator_step(self, batch, fake_imgs) -> Tuple[torch.Tensor, Dict[str, float]]:
         x, y, _ = batch
 
         pred_real = self.discriminator(y)
@@ -110,44 +130,57 @@ class ESRGAN(pl.LightningModule, SuperResolutionModelInterface):
 
         # discriminator loss is the average of these
         disc_loss = (fake_loss + real_loss) / 2
-        return disc_loss
 
-    def training_step(self, train_batch, batch_idx):
-        train_batch[0] = self.preprocess(train_batch[0])
+        logs = OrderedDict((
+            ('loss_D', disc_loss.item()),
+            ('loss_D_fake', fake_loss.item()),
+            ('loss_D_real', real_loss.item()),
+        ))
+        return disc_loss, logs
 
-        gen_opt, disc_opt = self.optimizers()
+    def training_step(self, batch):
+        batch[0] = self.preprocess(batch[0])
 
-        gen_loss, fake_imgs = self.generator_step(train_batch)
-        gen_opt.zero_grad()
-        self.manual_backward(gen_loss)
-        gen_opt.step()
+        gen_loss, fake_imgs, gen_logs = self.generator_step(batch)
+        self.optimizer_G.zero_grad()
+        gen_loss.backward()
+        self.optimizer_G.step()
 
-        self.log('Train/gen_loss', gen_loss.item(), on_step=True, on_epoch=True, prog_bar=True)
+        logs = OrderedDict((
+            ('losses', gen_logs.copy()),
+            ('images', OrderedDict({'G_images': fake_imgs})),
+        ))
+
         if self.global_step >= self._warmup_iters:
-            disc_loss = self.discriminator_step(train_batch, fake_imgs)
-            disc_opt.zero_grad()
-            self.manual_backward(disc_loss)
-            disc_opt.step()
-            self.log('Train/disc_loss', disc_loss.item(), on_step=True, on_epoch=True, prog_bar=True)
+            disc_loss, disc_logs = self.discriminator_step(batch, fake_imgs)
+            self.optimizer_D.zero_grad()
+            disc_loss.backward()
+            self.optimizer_D.step()
+            logs['losses'].update(disc_logs)
+        self.global_step += 1
+        return logs
 
-    def training_epoch_end(self, outputs) -> None:
-        gen_sch, disc_sch = self.lr_schedulers()
-        gen_sch.step()
-        disc_sch.step()
-
-    def validation_step(self, val_batch, batch_idx):
-        val_batch[0] = self.preprocess(val_batch[0])
-        x, y, _ = val_batch
+    def eval_step(self, batch):
+        batch[0] = self.preprocess(batch[0])
+        _, y, _ = batch
 
         with torch.no_grad():
-            gen_loss, fake_imgs = self.generator_step(val_batch)
-            disc_loss = self.discriminator_step(val_batch, fake_imgs)
+            _, fake_imgs, gen_logs = self.generator_step(batch)
 
-            m1 = psnr(fake_imgs, y)
-            m2 = ssim(fake_imgs, y)
+            logs = OrderedDict((
+                ('losses', gen_logs.copy()),
+                ('images', OrderedDict({'G_images': fake_imgs})),
+            ))
 
-            self.log('Validation/gen_loss', gen_loss.item(), on_step=True, on_epoch=True, prog_bar=True)
-            self.log('Validation/disc_loss', disc_loss.item(), on_step=True, on_epoch=True, prog_bar=True)
-
-            self.log('Validation/psnr', m1.item(), on_step=True, on_epoch=True, prog_bar=True)
-            self.log('Validation/ssim', m2.item(), on_step=True, on_epoch=True, prog_bar=True)
+            if self.global_step >= self._warmup_iters:
+                _, disc_logs = self.discriminator_step(batch, fake_imgs)
+                logs['losses'].update(disc_logs)
+            
+            impsnr = psnr(fake_imgs, y)
+            imssim = ssim(fake_imgs, y)
+            
+            logs['metrics'] = OrderedDict((
+                ('PSNR', impsnr),
+                ('SSIM', imssim)
+            ))
+        return logs
