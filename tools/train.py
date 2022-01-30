@@ -14,6 +14,8 @@ def seed_everything(seed):
     random.seed(seed)
     numpy.random.seed(seed)
     torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed) # if use multi-GPU
+    torch.cuda.manual_seed(seed)
 
 
 def train(args):

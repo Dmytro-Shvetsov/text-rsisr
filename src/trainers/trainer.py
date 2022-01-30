@@ -45,10 +45,6 @@ class Trainer:
             self.vis.print_scalars(losses, self.current_epoch, i, time_taken)
             if self.global_step % self.sample_interval == 0:
                 self.vis.plot_scalars(losses, self.global_step, 'Loss', 'train')
-
-                images['lr'], images['hr'] = batch[:2]
-                images.move_to_end('hr', last=False)
-                images.move_to_end('lr', last=False)
                 self.vis.save_visuals(images, self.global_step, 'train')
             self.global_step += 1
 
@@ -66,10 +62,6 @@ class Trainer:
                 test_batches_done = self.current_epoch * len(val_loader) + i
                 self.vis.plot_scalars(losses, test_batches_done, 'Loss', 'validation')
                 self.vis.plot_scalars(metrics, test_batches_done, 'Metric', 'validation')
-
-                images['lr'], images['hr'] = batch[:2]
-                images.move_to_end('hr', last=False)
-                images.move_to_end('lr', last=False)
                 self.vis.save_visuals(images, test_batches_done, 'validation')
 
     def test_epoch(self, test_loader):
@@ -86,10 +78,6 @@ class Trainer:
                 test_batches_done = self.current_epoch * len(test_loader) + i
                 self.vis.plot_scalars(losses, test_batches_done, 'Loss', 'test')
                 self.vis.plot_scalars(metrics, test_batches_done, 'Metric', 'test')
-
-                images['lr'], images['hr'] = batch[:2]
-                images.move_to_end('hr', last=False)
-                images.move_to_end('lr', last=False)
                 self.vis.save_visuals(images, test_batches_done, 'test')
 
     def store_checkpoint(self):

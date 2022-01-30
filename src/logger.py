@@ -29,7 +29,8 @@ class Logger:
         self.logger.info(f"================ Session ({time.strftime('%c')}) ================")
 
     def save_visuals(self, visuals, step, stage=''):
-        visuals['lr'] = F.interpolate(visuals['lr'], scale_factor=2, mode='bicubic')
+        if visuals['LR'].shape != visuals['HR'].shape:
+            visuals['LR'] = F.interpolate(visuals['LR'], scale_factor=2, mode='bicubic')
         image = torch.cat([make_grid(images, nrow=1, padding=0, normalize=True) for images in visuals.values()], 2)
         cols = '-'.join(visuals.keys())
         save_fp = self.vis_dir / f'{stage}_step_{str(step).zfill(5)}_{cols}.jpg'
