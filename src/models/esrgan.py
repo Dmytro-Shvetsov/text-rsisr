@@ -51,7 +51,7 @@ class ESRGAN(SuperResolutionModel):
 
     @property
     def optimizers(self):
-        return self.optimizer_G, self.optimizer_D if self.training else []
+        return [self.optimizer_G, self.optimizer_D] if self.training else []
     
     @property
     def schedulers(self):
@@ -160,27 +160,27 @@ class ESRGAN(SuperResolutionModel):
         self.global_step += 1
         return logs
 
+    @torch.no_grad()
     def eval_step(self, batch):
         batch[0] = self.preprocess(batch[0])
         _, y, _ = batch
 
-        with torch.no_grad():
-            _, fake_imgs, gen_logs = self.generator_step(batch)
+        _, fake_imgs, gen_logs = self.generator_step(batch)
 
-            logs = OrderedDict((
-                ('losses', gen_logs.copy()),
-                ('images', OrderedDict({'G_images': fake_imgs})),
-            ))
+        logs = OrderedDict((
+            ('losses', gen_logs.copy()),
+            ('images', OrderedDict({'G_images': fake_imgs})),
+        ))
 
-            if self.global_step >= self._warmup_iters:
-                _, disc_logs = self.discriminator_step(batch, fake_imgs)
-                logs['losses'].update(disc_logs)
-            
-            impsnr = psnr(fake_imgs, y)
-            imssim = ssim(fake_imgs, y)
-            
-            logs['metrics'] = OrderedDict((
-                ('PSNR', impsnr),
-                ('SSIM', imssim)
-            ))
+        if self.global_step >= self._warmup_iters:
+            _, disc_logs = self.discriminator_step(batch, fake_imgs)
+            logs['losses'].update(disc_logs)
+        
+        impsnr = psnr(fake_imgs, y)
+        imssim = ssim(fake_imgs, y)
+        
+        logs['metrics'] = OrderedDict((
+            ('PSNR', impsnr),
+            ('SSIM', imssim)
+        ))
         return logs

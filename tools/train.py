@@ -25,6 +25,7 @@ def train(args):
     datamodule.setup()
     trainer = Trainer(config)
     trainer.fit(datamodule.train_dataloader(), datamodule.val_dataloader())
+    datamodule.setup('test')
     results = trainer.test(datamodule.test_dataloader())
     with open(os.path.join(trainer.model_dir, 'test_results.json'), 'w') as fid:
         json.dump(results, fid)

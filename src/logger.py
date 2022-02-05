@@ -1,4 +1,5 @@
 from collections import OrderedDict
+import datetime
 import logging
 
 from pathlib import Path
@@ -29,8 +30,10 @@ class Logger:
         self.logger.info(f"================ Session ({time.strftime('%c')}) ================")
 
     def save_visuals(self, visuals, step, stage=''):
-        if visuals['LR'].shape != visuals['HR'].shape:
-            visuals['LR'] = F.interpolate(visuals['LR'], scale_factor=2, mode='bicubic')
+        hr_size = visuals['HR'].shape[-2], visuals['HR'].shape[-1]
+        for key in visuals:
+            if visuals[key].shape != visuals['HR'].shape:
+                visuals[key] = F.interpolate(visuals[key], hr_size, mode='bicubic')
         image = torch.cat([make_grid(images, nrow=1, padding=0, normalize=True) for images in visuals.values()], 2)
         cols = '-'.join(visuals.keys())
         save_fp = self.vis_dir / f'{stage}_step_{str(step).zfill(5)}_{cols}.jpg'
@@ -40,16 +43,23 @@ class Logger:
         for loss_name, value in losses.items():
             self.writer.add_scalar(f'{section.title()}/{stage}_{loss_name}', value, step)
 
-    def print_scalars(self, data, epoch, iters, t_comp):
+    def print_scalars(self, data, epoch, max_epochs, iters, max_iters, t_comp):
         """Console log current losses.
 
         Parameters:
+            data (OrderedDict) -- data to be logged in the format of (name, float) pairs
             epoch (int) -- current epoch
+            max_epoch (int) -- total number of epochs
             iters (int) -- current training iteration during this epoch (reset to 0 at the end of every epoch)
-            losses (OrderedDict) -- training losses stored in the format of (name, float) pairs
+            max_iters (int) -- total number of iterations in one epoch
             t_comp (float) -- computational time per data point (normalized by batch_size)
         """
-        message = '(Epoch: %d, iters: %d, time: %.6f) ' % (epoch, iters, t_comp)
+        # Determine approximate time left
+        batches_done = epoch * max_iters + iters
+        batches_left = max_epochs * max_iters - batches_done
+        time_left = datetime.timedelta(seconds=batches_left * t_comp)
+
+        message = '(Epoch: %d/%d, iters: %d/%d, time: %.6f, eta: %s) ' % (epoch, max_epochs, iters, max_iters, t_comp, time_left)
         message += ', '.join('%s: %.3f' % item for item in data.items())
         self.logger.info(message.title())
 

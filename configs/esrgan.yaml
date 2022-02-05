@@ -1,6 +1,7 @@
 # global settings
 seed: 42
 logs_dir: './model_logs'
+save_interval: 5
 sample_interval: 50
 run_name: esrgan
 

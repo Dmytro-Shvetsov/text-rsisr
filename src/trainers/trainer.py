@@ -18,6 +18,9 @@ class Trainer:
 
         self.model:SuperResolutionModel = object_from_dict(self.config.model, parent=models, config=config)
 
+        # for p in self.model.parameters():
+        #     p.register_hook(lambda grad: torch.clamp(grad, -1, 1))
+
         self.model_dir = Path(self.config.logs_dir) / self.config.run_name
         self.ckpt_dir = self.model_dir / 'checkpoints'
         self.ckpt_dir.mkdir(exist_ok=True, parents=True)
@@ -42,7 +45,7 @@ class Trainer:
             time_taken = perf_counter() - start_time
             
             losses, images = outs['losses'], outs['images']
-            self.vis.print_scalars(losses, self.current_epoch, i, time_taken)
+            self.vis.print_scalars(losses, self.current_epoch, self.num_epochs, i, len(train_loader), time_taken)
             if self.global_step % self.sample_interval == 0:
                 self.vis.plot_scalars(losses, self.global_step, 'Loss', 'train')
                 self.vis.save_visuals(images, self.global_step, 'train')
@@ -57,7 +60,7 @@ class Trainer:
             time_taken = perf_counter() - start_time
 
             losses, metrics, images = outs['losses'], outs['metrics'], outs['images']
-            self.vis.print_scalars(metrics, self.current_epoch, i, time_taken)
+            self.vis.print_scalars(metrics, self.current_epoch, self.num_epochs, i, len(val_loader), time_taken)
             if i % self.sample_interval == 0:
                 test_batches_done = self.current_epoch * len(val_loader) + i
                 self.vis.plot_scalars(losses, test_batches_done, 'Loss', 'validation')
@@ -73,7 +76,7 @@ class Trainer:
             time_taken = perf_counter() - start_time
 
             losses, metrics, images = outs['losses'], outs['metrics'], outs['images']
-            self.vis.print_scalars(metrics, self.current_epoch, i, time_taken)
+            self.vis.print_scalars(metrics, self.current_epoch, self.num_epochs, i, len(test_loader), time_taken)
             if i % self.sample_interval == 0:
                 test_batches_done = self.current_epoch * len(test_loader) + i
                 self.vis.plot_scalars(losses, test_batches_done, 'Loss', 'test')
