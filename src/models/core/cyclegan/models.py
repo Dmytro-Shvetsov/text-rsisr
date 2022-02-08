@@ -82,7 +82,7 @@ class GeneratorResNet(nn.Module):
 
         self.model = nn.Sequential(*model)
 
-    def forward(self, x):
+    def forward(self, x, *args, **kwargs):
         return self.model(x)
 
 

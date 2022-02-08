@@ -14,6 +14,7 @@ from src.models.base import SuperResolutionModel
 
 from .core.pseudosr.rcan import make_cleaning_net, make_SR_net
 from .core.pseudosr.generators import TransferNet
+from .core.cyclegan.models import GeneratorResNet, Discriminator
 from .core.pseudosr.discriminators import NLayerDiscriminator
 from .core.pseudosr.losses import GANLoss, geometry_ensemble
 
@@ -21,7 +22,7 @@ from src.losses.gradient_prior import GradientPriorLoss
 
 
 class PseudoModel(SuperResolutionModel):
-    def __init__(self, config, use_ddp=False):
+    def __init__(self, config, **kwargs):
         super().__init__()
         self.cfg = config
         self.device = config.device
@@ -34,19 +35,16 @@ class PseudoModel(SuperResolutionModel):
             Normalize(self.means, self.stds),
         ])
         self.scale_factor = int(config.hr_img_size[0] / config.lr_img_size[0])
+
+        # self.G_xy = GeneratorResNet((3, *config.lr_img_size), kwargs.get('n_residual_blocks', 9))
+        # self.G_yx = GeneratorResNet((3, *config.lr_img_size), kwargs.get('n_residual_blocks', 9))
         self.G_xy = make_cleaning_net().to(self.device)
         self.G_yx = TransferNet().to(self.device)
         self.U = make_SR_net(scale_factor=self.scale_factor).to(self.device)
-        self.D_x = NLayerDiscriminator(3, scale_factor=1, norm_layer=nn.InstanceNorm2d).to(self.device)
-        self.D_y = NLayerDiscriminator(3, scale_factor=1, norm_layer=nn.InstanceNorm2d).to(self.device)
-        self.D_sr = NLayerDiscriminator(3, scale_factor=self.scale_factor, norm_layer=nn.InstanceNorm2d).to(self.device)
-        if use_ddp:
-            self.G_xy = DDP(self.G_xy, device_ids=[self.device])
-            self.G_yx = DDP(torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.G_yx), device_ids=[self.device])
-            self.U = DDP(self.U, device_ids=[self.device])
-            self.D_x = DDP(self.D_x, device_ids=[self.device])
-            self.D_y = DDP(self.D_y, device_ids=[self.device])
-            self.D_sr = DDP(self.D_sr, device_ids=[self.device])
+
+        self.D_x = NLayerDiscriminator(3, scale_factor=1, norm_layer=nn.Identity, n_group=1).to(self.device)
+        self.D_y = NLayerDiscriminator(3, scale_factor=1, norm_layer=nn.Identity, n_group=1).to(self.device)
+        self.D_sr = NLayerDiscriminator(3, scale_factor=self.scale_factor, norm_layer=nn.Identity, n_group=1).to(self.device)
 
         self.opt_Gxy = optim.Adam(self.G_xy.parameters(), lr=config.lr, betas=(0.5, 0.999))
         self.opt_Gyx = optim.Adam(self.G_yx.parameters(), lr=config.lr, betas=(0.5, 0.999))
@@ -167,7 +165,7 @@ class PseudoModel(SuperResolutionModel):
         fake_Xs = self.G_yx(Yds, Zs)
         rec_Yds = self.G_xy(fake_Xs)
         fake_Yds = self.G_xy(Xs)
-        geo_Yds = geometry_ensemble(self.G_xy, Xs)
+        # geo_Yds = geometry_ensemble(self.G_xy, Xs)
         idt_out = self.G_xy(Yds) if self.idt_input_clean else fake_Yds
         sr_y = self.U(rec_Yds)
         sr_x = self.U(fake_Yds)
@@ -214,13 +212,15 @@ class PseudoModel(SuperResolutionModel):
         loss_gan_Gxy = self.gan_loss(pred_fake_Yds, True, False)
         loss_idt_Gxy = self.l1_loss(idt_out, Yds) if self.idt_input_clean else self.l1_loss(idt_out, Xs)
         loss_cycle = self.l1_loss(rec_Yds, Yds)
-        loss_geo = self.l1_loss(fake_Yds, geo_Yds)
+        # loss_geo = self.l1_loss(fake_Yds, geo_Yds)
         loss_d_sr = self.gan_loss(pred_sr_y, True, False)
+        loss_geo = 0.0 # temp test
+        # loss_d_sr = 0.0 # temp test
         loss_total_gen = loss_gan_Gyx + loss_gan_Gxy + self.cyc_weight * loss_cycle + self.idt_weight * loss_idt_Gxy + self.geo_weight * loss_geo + self.d_sr_weight * loss_d_sr
         loss_dict["G_xy_gan"] = loss_gan_Gxy.item()
         loss_dict["G_xy_idt"] = loss_idt_Gxy.item()
         loss_dict["cyc_loss"] = loss_cycle.item()
-        loss_dict["G_xy_geo"] = loss_geo.item()
+        # loss_dict["G_xy_geo"] = loss_geo.item()
         loss_dict["D_sr"] = loss_d_sr.item()
         loss_dict["G_total"] = loss_total_gen.item()
 
@@ -232,7 +232,7 @@ class PseudoModel(SuperResolutionModel):
         # U
         self.opt_U.zero_grad()
         sr_y = self.U(rec_Yds.detach())
-        loss_U_pix = self.l2_loss(sr_y, Ys)
+        loss_U_pix = self.l1_loss(sr_y, Ys)
         loss_U_gp = 1e-4 * self.gp_loss(sr_y, Ys)
         loss_U = loss_U_pix + loss_U_gp
         loss_U.backward()
@@ -263,14 +263,13 @@ class PseudoModel(SuperResolutionModel):
         x = self.nets["G_yx"](Yds, Zs)
         sr = self.nets["U"](y)
 
-        impsnr = psnr(sr, Ys)
-        imssim = ssim(sr, Ys)
-
         logs = OrderedDict((
             ('losses', OrderedDict()),
             ('metrics', OrderedDict((
-                ('PSNR', impsnr),
-                ('SSIM', imssim)
+                ('G_xy_PSNR', psnr(y, Yds)),
+                ('G_xy_SSIM', ssim(y, Yds)),
+                ('U_PSNR', psnr(sr, Ys)),
+                ('U_SSIM', ssim(sr, Ys)),
             ))),
             ('images', OrderedDict((
                 ('LR', Xs),

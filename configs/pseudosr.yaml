@@ -1,7 +1,7 @@
 # global settings
 seed: 42
 logs_dir: './model_logs'
-save_interval: 5
+save_interval: 1
 sample_interval: 50
 run_name: pseudosr
 
@@ -21,10 +21,10 @@ norm_stds: [0.5, 0.5, 0.5]
 
 # training settings
 num_epochs: 60
-batch_size: 8
+batch_size: 16
 lr: 0.0001
 lr_milestones: [20, 38, 50, 55]
-# ckpt_path: model_logs\cyclegan\checkpoints\epoch-1.pth
+# ckpt_path: model_logs\pseudosr\checkpoints\epoch-2.pth
 
 model:
   type: PseudoModel
