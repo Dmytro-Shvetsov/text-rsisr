@@ -86,7 +86,7 @@ class ESRGAN(SuperResolutionModel):
         return ret
 
     def generator_step(self, batch) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, float]]:
-        x, y, _ = batch
+        x, y = batch[:2]
         valid = torch.ones((x.size(0), *self.discriminator.output_shape), requires_grad=False).type_as(x)
         # self.generator.train()
         # print(self.generator.training)
@@ -116,7 +116,7 @@ class ESRGAN(SuperResolutionModel):
         return gen_loss, fake_imgs, logs
 
     def discriminator_step(self, batch, fake_imgs) -> Tuple[torch.Tensor, Dict[str, float]]:
-        x, y, _ = batch
+        x, y = batch[:2]
 
         pred_real = self.discriminator(y)
         pred_fake = self.discriminator(fake_imgs.detach())

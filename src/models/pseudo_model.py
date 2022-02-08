@@ -18,6 +18,10 @@ from .core.cyclegan.models import GeneratorResNet, Discriminator
 from .core.pseudosr.discriminators import NLayerDiscriminator
 from .core.pseudosr.losses import GANLoss, geometry_ensemble
 
+from src.models.esrgan import ESRGAN
+
+
+
 from src.losses.gradient_prior import GradientPriorLoss
 
 
@@ -40,18 +44,22 @@ class PseudoModel(SuperResolutionModel):
         # self.G_yx = GeneratorResNet((3, *config.lr_img_size), kwargs.get('n_residual_blocks', 9))
         self.G_xy = make_cleaning_net().to(self.device)
         self.G_yx = TransferNet().to(self.device)
-        self.U = make_SR_net(scale_factor=self.scale_factor).to(self.device)
+        # self.U = make_SR_net(scale_factor=self.scale_factor).to(self.device)
+        self.U = ESRGAN(config) # TODO: finish this
 
         self.D_x = NLayerDiscriminator(3, scale_factor=1, norm_layer=nn.Identity, n_group=1).to(self.device)
         self.D_y = NLayerDiscriminator(3, scale_factor=1, norm_layer=nn.Identity, n_group=1).to(self.device)
-        self.D_sr = NLayerDiscriminator(3, scale_factor=self.scale_factor, norm_layer=nn.Identity, n_group=1).to(self.device)
+        self.D_sr = self.U.discriminator
+        # self.D_sr = NLayerDiscriminator(3, scale_factor=self.scale_factor, norm_layer=nn.Identity, n_group=1).to(self.device)
 
         self.opt_Gxy = optim.Adam(self.G_xy.parameters(), lr=config.lr, betas=(0.5, 0.999))
         self.opt_Gyx = optim.Adam(self.G_yx.parameters(), lr=config.lr, betas=(0.5, 0.999))
         self.opt_Dx = optim.Adam(self.D_x.parameters(), lr=config.lr, betas=(0.5, 0.999))
         self.opt_Dy = optim.Adam(self.D_y.parameters(), lr=config.lr, betas=(0.5, 0.999))
-        self.opt_Dsr = optim.Adam(self.D_sr.parameters(), lr=config.lr, betas=(0.5, 0.999))
-        self.opt_U = optim.Adam(self.U.parameters(), lr=config.lr)
+        # self.opt_Dsr = optim.Adam(self.D_sr.parameters(), lr=config.lr, betas=(0.5, 0.999))
+        self.opt_Dsr = self.U.optimizer_D
+        # self.opt_U = optim.Adam(self.U.parameters(), lr=config.lr)
+        self.opt_U = self.U.optimizer_G
 
         self.lr_Gxy = optim.lr_scheduler.MultiStepLR(self.opt_Gxy, milestones=config.lr_milestones, gamma=0.5)
         self.lr_Gyx = optim.lr_scheduler.MultiStepLR(self.opt_Gyx, milestones=config.lr_milestones, gamma=0.5)
@@ -190,10 +198,12 @@ class PseudoModel(SuperResolutionModel):
         loss_dict["D_y"] = loss_D_y.item()
 
         # D_sr
-        pred_sr_x = self.D_sr(sr_x.detach())
-        pred_sr_y = self.D_sr(sr_y.detach())
-        loss_D_sr = (self.gan_loss(pred_sr_x, True, True) + self.gan_loss(pred_sr_y, False, True)) * 0.5
+        # pred_sr_x = self.D_sr(sr_x.detach())
+        # pred_sr_y = self.D_sr(sr_y.detach())
+        # loss_D_sr = (self.gan_loss(pred_sr_x, True, True) + self.gan_loss(pred_sr_y, False, True)) * 0.5
+        # sr_x - real, sr_y - fake
         self.opt_Dsr.zero_grad()
+        loss_D_sr, _ = self.U.discriminator_step((Yds, sr_x.detach()), sr_y.detach())
         loss_D_sr.backward()
         self.opt_Dsr.step()
         loss_dict["D_sr"] = loss_D_sr.item()
@@ -230,15 +240,18 @@ class PseudoModel(SuperResolutionModel):
         self.opt_Gxy.step()
 
         # U
+
+        # self.opt_U.zero_grad()
+        # sr_y = self.U(rec_Yds.detach())
+        # loss_U_pix = self.l1_loss(sr_y, Ys)
+        # loss_U_gp = 1e-4 * self.gp_loss(sr_y, Ys)
+        # loss_U = loss_U_pix + loss_U_gp
         self.opt_U.zero_grad()
-        sr_y = self.U(rec_Yds.detach())
-        loss_U_pix = self.l1_loss(sr_y, Ys)
-        loss_U_gp = 1e-4 * self.gp_loss(sr_y, Ys)
-        loss_U = loss_U_pix + loss_U_gp
+        loss_U, _, _ = self.U.generator_step((rec_Yds.detach(), Ys)) 
         loss_U.backward()
         self.opt_U.step()
-        loss_dict["U_pix"] = loss_U_pix.item()
-        loss_dict["U_gp"] = loss_U_gp.item()
+        # loss_dict["U_pix"] = loss_U_pix.item()
+        # loss_dict["U_gp"] = loss_U_gp.item()
         loss_dict["U"] = loss_U.item()
 
         logs = OrderedDict((

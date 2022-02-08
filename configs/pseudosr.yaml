@@ -21,7 +21,7 @@ norm_stds: [0.5, 0.5, 0.5]
 
 # training settings
 num_epochs: 60
-batch_size: 16
+batch_size: 8
 lr: 0.0001
 lr_milestones: [20, 38, 50, 55]
 # ckpt_path: model_logs\pseudosr\checkpoints\epoch-2.pth
