@@ -9,8 +9,8 @@ device: cuda:0
 num_epochs: 200
 
 # dataset settings
-num_workers: 14
-dataset_dir: 'C:\\Users\\Dymok\\Desktop\\text-rsisr\\data\\text_zoom'
+num_workers: 12
+dataset_dir: 'data/text_zoom'
 lr_img_size: !!python/tuple [32, 128] # hxw
 hr_img_size: !!python/tuple [32, 128] # hxw
 val_split_complexity: easy
@@ -21,9 +21,9 @@ norm_means: [0.5, 0.5, 0.5]
 norm_stds: [0.5, 0.5, 0.5]
 
 # train settings
-batch_size: 1
+batch_size: 32
 lr: 0.0002
-# ckpt_path: model_logs\cyclegan\checkpoints\epoch-1.pth
+# ckpt_path: model_logs/cyclegan/checkpoints/epoch-85.pth
 
 model:
   type: CycleGAN

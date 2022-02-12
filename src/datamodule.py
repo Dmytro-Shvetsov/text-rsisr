@@ -4,7 +4,6 @@ from re import S
 
 import albumentations as albu
 import cv2
-import pytorch_lightning as pl
 import torch
 
 from torch.utils.data import DataLoader
@@ -46,13 +45,13 @@ class DataModule:
 
         self._lr_transforms = albu.Compose([
             albu.Resize(*config.lr_img_size, cv2.INTER_CUBIC),
-            albu.ToFloat(),
-            albu.Normalize(config.norm_means, config.norm_stds, max_pixel_value=255.0), # outputs values in [0.; 1.] range
+            albu.ToFloat(max_value=255.0), # outputs values in [0.; 1.] range
+            albu.Normalize(config.norm_means, config.norm_stds, max_pixel_value=1.0), 
         ])
         self._hr_transforms = albu.Compose([
             albu.Resize(*config.hr_img_size, cv2.INTER_CUBIC),
-            albu.ToFloat(),
-            albu.Normalize(config.norm_means, config.norm_stds), # outputs values in [0.; 1.] range
+            albu.ToFloat(max_value=255.0), # outputs values in [0.; 1.] range
+            albu.Normalize(config.norm_means, config.norm_stds, max_pixel_value=1.0),
         ])
 
     def setup(self, stage=None):
@@ -82,7 +81,7 @@ class DataModule:
 
     def test_dataloader(self):
         return DataLoader(self._test_dst, 
-                          batch_size=2, 
+                          batch_size=1, 
                           shuffle=False, 
-                          num_workers=self._cfg.num_workers,
+                          num_workers=1,
                           pin_memory=True)

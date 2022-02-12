@@ -5,10 +5,12 @@ from os import path
 from src.version import __version__
 
 here = path.abspath(path.dirname(__file__))
-
-# Get the long description from the README file
-with open(path.join(here, 'README.md'), encoding='utf-8') as f:
-    long_description = f.read()
+try:
+    # Get the long description from the README file
+    with open(path.join(here, 'README.md'), encoding='utf-8') as f:
+        long_description = f.read()
+except FileNotFoundError:
+    long_description = ''
 
 with open(path.join(here, 'requirements.txt'), encoding='utf-8') as f:
     install_requires = [line.strip() for line in f]

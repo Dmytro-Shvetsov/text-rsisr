@@ -4,7 +4,6 @@ import cv2
 from sklearn.feature_extraction import image
 import torch
 import numpy as np
-import pytorch_lightning as pl
 from torch import nn
 from torch.nn import functional as F
 from torchmetrics.functional import ssim, psnr
@@ -78,7 +77,7 @@ class ESRGAN(SuperResolutionModel):
         return self.generator(x)
 
     def parse_outputs(self, outputs):
-        return denormalize(outputs, self.means, self.stds).mul_(255).add_(0.5).byte()
+        return denormalize(outputs, self.means, self.stds).mul_(255).add_(0.5).clamp_(0, 255).byte()
 
     def train(self, mode: bool = True):
         ret = super().train(mode)

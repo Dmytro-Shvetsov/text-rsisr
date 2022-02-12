@@ -1,0 +1,54 @@
+FROM nvcr.io/nvidia/pytorch:21.06-py3
+ARG DEBIAN_FRONTEND=noninteractive
+
+ARG container_repo_dir='/home/docker/repository/'
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    build-essential \
+    curl \
+    pkg-config \
+    software-properties-common \
+    unzip \
+    git \
+    libprotobuf-dev protobuf-compiler \
+    python3-pip \
+    sudo
+
+# Create container user
+RUN useradd -m docker && echo "docker:docker" | chpasswd && adduser docker sudo
+
+# OpenCV import fix packages
+RUN apt-get install ffmpeg libsm6 libxext6 -y
+
+WORKDIR $container_repo_dir
+
+RUN chown -R docker:docker $container_repo_dir
+RUN chmod 755 $container_repo_dir
+
+USER docker
+
+RUN echo "alias python=python3" >> ~/.bashrc
+RUN echo "alias pip=pip3" >> ~/.bashrc
+
+ENV LANG en_US.UTF-8
+ENV PATH $PATH:/home/docker/.local/bin
+
+RUN python3 -m pip install --upgrade pip setuptools==59.5.0
+
+# Install project dependencies
+COPY ./requirements.txt .
+RUN python3 -m pip install -r requirements.txt
+COPY ./src ./src
+COPY ./setup.py ./setup.py
+RUN python3 -m pip install -e .
+
+# Install TRT
+RUN python3 -m pip install git+https://github.com/NVIDIA-AI-IOT/torch2trt.git
+
+# jupyter
+EXPOSE 8888
+# tensorboard
+EXPOSE 6006
+
+CMD /bin/bash

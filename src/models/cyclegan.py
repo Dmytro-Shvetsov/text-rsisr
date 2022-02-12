@@ -1,9 +1,8 @@
 from tkinter import Variable
 from typing import Callable
 import cv2
-from importlib_metadata import itertools
+import itertools
 import numpy as np
-import pytorch_lightning as pl
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -97,7 +96,7 @@ class CycleGAN(SuperResolutionModel):
         return self.G_AB(x)
 
     def parse_outputs(self, outputs):
-        return denormalize(outputs, self.means, self.stds).mul_(255).add_(0.5).byte()
+        return denormalize(outputs, self.means, self.stds).mul_(255).add_(0.5).clamp_(0, 255).byte()
 
     def generators_step(self, batch):
         real_A, real_B, _ = batch
@@ -138,7 +137,7 @@ class CycleGAN(SuperResolutionModel):
         })
         return loss_G, (fake_A, fake_B), logs
 
-    def discriminator_A_step(self, batch, fake_imgs, fake_buffer=True):
+    def discriminator_A_step(self, batch, fake_imgs):
         real_A, real_B, _ = batch
 
         fake_A, _ = fake_imgs
@@ -161,7 +160,7 @@ class CycleGAN(SuperResolutionModel):
         })
         return loss_D_A, logs
 
-    def discriminator_B_step(self, batch, fake_imgs, fake_buffer=True):
+    def discriminator_B_step(self, batch, fake_imgs):
         real_A, real_B, _ = batch
 
         _, fake_B = fake_imgs
@@ -218,15 +217,12 @@ class CycleGAN(SuperResolutionModel):
     @torch.no_grad()
     def eval_step(self, batch):
         batch[0] = self.preprocess(batch[0])
-        _, y, _ = batch
+        x, y, _ = batch
 
         loss_G, fake_imgs, G_logs = self.generators_step(batch)
         loss_D_A, D_A_logs = self.discriminator_A_step(batch, fake_imgs)
         loss_D_B, D_B_logs = self.discriminator_B_step(batch, fake_imgs)
         
-        impsnr = psnr(fake_imgs, y)
-        imssim = ssim(fake_imgs, y)
-
         logs = OrderedDict({'losses': OrderedDict(), 'images': OrderedDict()})
         logs['losses'].update(G_logs)
         logs['losses']['loss_D'] = (loss_D_A + loss_D_B) / 2
@@ -240,7 +236,9 @@ class CycleGAN(SuperResolutionModel):
         ))
 
         logs['metrics'] = OrderedDict((
-            ('PSNR', impsnr),
-            ('SSIM', imssim)
+            ('G_AB_PSNR', psnr(fake_imgs[1], y)),
+            ('G_AB_SSIM', ssim(fake_imgs[1], y)),
+            ('G_BA_PSNR', psnr(fake_imgs[0], x)),
+            ('G_BA_SSIM', ssim(fake_imgs[0], x)),
         ))
         return logs
