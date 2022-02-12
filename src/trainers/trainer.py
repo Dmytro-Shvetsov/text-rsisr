@@ -22,7 +22,7 @@ class Trainer:
         # for p in self.model.parameters():
         #     p.register_hook(lambda grad: torch.clamp(grad, -1, 1))
 
-        self.model_dir = Path(self.config.logs_dir) / self.config.run_name
+        self.model_dir = Path(self.config.logs_dir).absolute() / self.config.run_name
         self.ckpt_dir = self.model_dir / 'checkpoints'
         self.ckpt_dir.mkdir(exist_ok=True, parents=True)
 
@@ -52,8 +52,6 @@ class Trainer:
                 self.vis.print_scalars(losses, self.current_epoch, self.num_epochs, i, len(train_loader), time_taken)
                 self.vis.save_visuals(images, self.global_step, 'train')
             self.global_step += 1
-            if i == 5:
-                break
         self.vis.plot_scalars(avg_losses, self.current_epoch, 'Loss', 'train')
 
     def validation_epoch(self, val_loader):
@@ -90,8 +88,6 @@ class Trainer:
             if i % self.sample_interval == 0:
                 self.vis.print_scalars(metrics, self.current_epoch, self.num_epochs, i, len(test_loader), time_taken)
                 self.vis.save_visuals(images, self.current_epoch * len(test_loader) + i, 'test')
-            if i == 5:
-                break
         self.vis.plot_scalars(avg_losses, self.current_epoch, 'Loss', 'test')
         self.vis.plot_scalars(avg_metrics, self.current_epoch, 'Metric', 'test')
         return avg_metrics
@@ -125,7 +121,6 @@ class Trainer:
                 sch.step()
             if epoch % self.save_interval == 0:
                 self.store_checkpoint()
-            break
 
     def test(self, test_loader):
         self.vis.logger.info('---------------------------- Testing ----------------------------')
