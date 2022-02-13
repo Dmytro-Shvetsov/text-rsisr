@@ -3,7 +3,7 @@ seed: 42
 logs_dir: './model_logs'
 save_interval: 1
 sample_interval: 50
-run_name: pseudosr
+run_name: pseudosr_pan
 
 device: cuda:0
 
@@ -21,10 +21,11 @@ norm_stds: [1.0, 1.0, 1.0]
 
 # training settings
 num_epochs: 60
-batch_size: 12
+batch_size: 32
 lr: 0.0001
 lr_milestones: [20, 38, 50, 55]
-# ckpt_path: model_logs\pseudosr\checkpoints\epoch-2.pth
+ckpt_path: model_logs\pseudosr\checkpoints\epoch-56.pth
 
 model:
-  type: PseudoModel
+  # type: PseudoModel
+  type: PseudoModelPAN

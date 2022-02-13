@@ -47,16 +47,18 @@ class Trainer:
             time_taken = perf_counter() - start_time
             
             losses, images = outs['losses'], outs['images']
-            avg_losses = loss_avg_meter.update(losses)
+            loss_avg_meter.update(losses)
             if self.global_step % self.sample_interval == 0:
                 self.vis.print_scalars(losses, self.current_epoch, self.num_epochs, i, len(train_loader), time_taken)
                 self.vis.save_visuals(images, self.global_step, 'train')
             self.global_step += 1
+        avg_losses = loss_avg_meter.get_average()
         self.vis.plot_scalars(avg_losses, self.current_epoch, 'Loss', 'train')
 
     def validation_epoch(self, val_loader):
         self.model.eval()
         loss_avg_meter, metrics_avg_meter = AverageMeter(), AverageMeter()
+        self.vis.logger.info('---------------------------- Validating ----------------------------')
         for i, batch in enumerate(val_loader):
             batch[:2] = [t.to(self.device) for t in batch[:2]]
             start_time = perf_counter()
@@ -64,12 +66,12 @@ class Trainer:
             time_taken = perf_counter() - start_time
 
             losses, metrics, images = outs['losses'], outs['metrics'], outs['images']
-            avg_losses, avg_metrics = loss_avg_meter.update(losses), metrics_avg_meter.update(metrics)
+            loss_avg_meter.update(losses), metrics_avg_meter.update(metrics)
             if i % self.sample_interval == 0:
                 self.vis.print_scalars(metrics, self.current_epoch, self.num_epochs, i, len(val_loader), time_taken)
                 self.vis.save_visuals(images, self.current_epoch * len(val_loader) + i, 'validation')
-            if i == 5:
-                break
+        self.vis.logger.info('--------------------------------------------------------------------')
+        avg_losses, avg_metrics = loss_avg_meter.get_average(), metrics_avg_meter.get_average()
         self.vis.plot_scalars(avg_losses, self.current_epoch, 'Loss', 'validation')
         self.vis.plot_scalars(avg_metrics, self.current_epoch, 'Metric', 'validation')
         return avg_metrics
@@ -77,6 +79,7 @@ class Trainer:
     def test_epoch(self, test_loader):
         self.model.eval()
         loss_avg_meter, metrics_avg_meter = AverageMeter(), AverageMeter()
+        self.vis.logger.info('---------------------------- Testing ----------------------------')
         for i, batch in enumerate(test_loader):
             batch[:2] = [t.to(self.device) for t in batch[:2]]
             start_time = perf_counter()
@@ -84,10 +87,12 @@ class Trainer:
             time_taken = perf_counter() - start_time
 
             losses, metrics, images = outs['losses'], outs['metrics'], outs['images']
-            avg_losses, avg_metrics = loss_avg_meter.update(losses), metrics_avg_meter.update(metrics)
+            loss_avg_meter.update(losses), metrics_avg_meter.update(metrics)
             if i % self.sample_interval == 0:
                 self.vis.print_scalars(metrics, self.current_epoch, self.num_epochs, i, len(test_loader), time_taken)
                 self.vis.save_visuals(images, self.current_epoch * len(test_loader) + i, 'test')
+        self.vis.logger.info('--------------------------------------------------------------------')
+        avg_losses, avg_metrics = loss_avg_meter.get_average(), metrics_avg_meter.get_average()
         self.vis.plot_scalars(avg_losses, self.current_epoch, 'Loss', 'test')
         self.vis.plot_scalars(avg_metrics, self.current_epoch, 'Metric', 'test')
         return avg_metrics
@@ -112,10 +117,10 @@ class Trainer:
 
     def fit(self, train_loader, val_loader):
         self.vis.reset()
+        self.validation_epoch(val_loader)
         for epoch in range(self.current_epoch, self.num_epochs):
             self.current_epoch = epoch
             self.training_epoch(train_loader)
-            self.vis.logger.info('---------------------------- Validating ----------------------------')
             self.validation_epoch(val_loader)
             for sch in self.model.schedulers:
                 sch.step()
@@ -123,5 +128,4 @@ class Trainer:
                 self.store_checkpoint()
 
     def test(self, test_loader):
-        self.vis.logger.info('---------------------------- Testing ----------------------------')
         return self.test_epoch(test_loader)
