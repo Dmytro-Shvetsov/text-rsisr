@@ -1,31 +1,28 @@
 # global settings
 seed: 42
-logs_dir: './model_logs'
-save_interval: 1
+logs_dir: './mnt/model_logs'
+save_interval: 5
 sample_interval: 50
-run_name: pseudosr_pan
+run_name: spsr
 
 device: cuda:0
+num_epochs: 100
 
 # dataset settings
-num_workers: 14
+num_workers: 0
 dataset_dir: 'data/text_zoom'
 lr_img_size: !!python/tuple [16, 64] # hxw
 hr_img_size: !!python/tuple [32, 128] # hxw
 val_split_complexity: easy
 test_split_complexity: medium
 
-# -0.5 to 0.5 normalization
-norm_means: [0.5, 0.5, 0.5]
+norm_means: [0.0, 0.0, 0.0]
 norm_stds: [1.0, 1.0, 1.0]
 
-# training settings
-num_epochs: 60
+# train settings
 batch_size: 32
-lr: 0.0001
+lr: 0.0002
 lr_milestones: [20, 38, 50, 55]
-ckpt_path: mnt\model_logs\pseudosr_pan\checkpoints\epoch-56.pth
-
+# ckpt_path: model_logs\esrgan\checkpoints\epoch-1.pth
 model:
-  # type: PseudoModel
-  type: PseudoModelPAN
+  type: SPSR

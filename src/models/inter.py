@@ -23,6 +23,12 @@ class InterpolationModel(SuperResolutionModel):
         self.device = config.device
 
         self.scale_factor = int(config.hr_img_size[0] / config.lr_img_size[0])
+        self.means, self.stds = torch.Tensor(config.norm_means).to(self.cfg.device), torch.Tensor(config.norm_stds).to(self.cfg.device)
+        self._prepr_op = Compose([
+            Resize(self.cfg.lr_img_size, InterpolationMode.BICUBIC),
+            ToTensor(),
+            Normalize(self.means, self.stds),
+        ])
         self.inter_type = kwargs.get('mode')
 
     def load(self):
@@ -39,13 +45,15 @@ class InterpolationModel(SuperResolutionModel):
     def preprocess(self, images):
         if not isinstance(images, torch.Tensor):
             images = torch.from_numpy(images, device=self.generator.device)
-        return images
-    
+        if torch.is_floating_point(images): # assumed that already normalized
+            return images
+        return self._prepr_op(images)
+
     def forward(self, inputs):
         return F.interpolate(inputs, scale_factor=self.scale_factor, mode=self.inter_type)
 
     def parse_outputs(self, outputs):
-        return outputs
+        return denormalize(outputs, self.means, self.stds).mul_(255).add_(0.5).clamp_(0, 255).byte()
 
     def training_step(self, batch):
         pass

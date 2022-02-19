@@ -43,12 +43,12 @@ class DataModule:
         self._test_dst_dir = self._root_dir / 'test' / self._cfg.test_split_complexity
         self._train_dst, self._val_dst, self._test_dst = None, None, None
 
-        self._lr_transforms = albu.Compose([
+        self.lr_transforms = albu.Compose([
             albu.Resize(*config.lr_img_size, cv2.INTER_CUBIC),
             albu.ToFloat(max_value=255.0), # outputs values in [0.; 1.] range
             albu.Normalize(config.norm_means, config.norm_stds, max_pixel_value=1.0), 
         ])
-        self._hr_transforms = albu.Compose([
+        self.hr_transforms = albu.Compose([
             albu.Resize(*config.hr_img_size, cv2.INTER_CUBIC),
             albu.ToFloat(max_value=255.0), # outputs values in [0.; 1.] range
             albu.Normalize(config.norm_means, config.norm_stds, max_pixel_value=1.0),
@@ -57,12 +57,12 @@ class DataModule:
     def setup(self, stage=None):
         # called on every process in DDP
         if stage is None or stage == 'fit':
-            train_splits = [TextZoomDataset(p, self._lr_transforms, self._hr_transforms) for p in self._train_dst_dirs]
+            train_splits = [TextZoomDataset(p, self.lr_transforms, self.hr_transforms) for p in self._train_dst_dirs]
             self._train_dst = ConcatDataset(train_splits)
-            self._val_dst = TextZoomDataset(self._val_dst_dir, self._lr_transforms, self._hr_transforms)
+            self._val_dst = TextZoomDataset(self._val_dst_dir, self.lr_transforms, self.hr_transforms)
 
         if stage == 'test':
-            self._test_dst = TextZoomDataset(self._test_dst_dir, self._lr_transforms, self._hr_transforms)
+            self._test_dst = TextZoomDataset(self._test_dst_dir, self.lr_transforms, self.hr_transforms)
 
     def train_dataloader(self):
         return DataLoader(self._train_dst, 
@@ -74,14 +74,14 @@ class DataModule:
 
     def val_dataloader(self):
         return DataLoader(self._val_dst, 
-                          batch_size=2, 
+                          batch_size=self._cfg.batch_size // 2, 
                           shuffle=False, 
                           num_workers=self._cfg.num_workers,
                           pin_memory=True)
 
     def test_dataloader(self):
         return DataLoader(self._test_dst, 
-                          batch_size=1, 
+                          batch_size=self._cfg.batch_size // 2, 
                           shuffle=False, 
                           num_workers=1,
                           pin_memory=True)
