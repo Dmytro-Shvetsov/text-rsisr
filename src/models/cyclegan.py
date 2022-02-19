@@ -28,7 +28,7 @@ class CycleGAN(SuperResolutionModel):
 
         self.means, self.stds = torch.Tensor(config.norm_means).to(self.cfg.device), torch.Tensor(config.norm_stds).to(self.cfg.device)
         self._prepr_op = Compose([
-            Resize(self.cfg.hr_img_size, InterpolationMode.BICUBIC),
+            Resize(self.cfg.lr_img_size, InterpolationMode.BICUBIC),
             ToTensor(),
             Normalize(config.norm_means, config.norm_stds),
         ])

@@ -15,7 +15,7 @@ hr_img_size: !!python/tuple [32, 128] # hxw
 val_split_complexity: easy
 test_split_complexity: medium
 
-# -1 to 1 normalization
+# -0.5 to 0.5 normalization
 norm_means: [0.5, 0.5, 0.5]
 norm_stds: [1.0, 1.0, 1.0]
 

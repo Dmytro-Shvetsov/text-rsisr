@@ -143,13 +143,12 @@ def make_cleaning_net():
             "res_scale":1.0}
     return RCAN(opt)
 
+
 def make_SR_net(scale_factor=2):
     opt = {"n_resgroups":5, "n_resblocks":20, "n_feats":64, "reduction":16, "scale":scale_factor,
             "data_train":"NONE",  "n_colors":3,
             "res_scale":1.0}
     return RCAN(opt)
-    # opt = {'in_nc': 3, 'out_nc': 3, 'nf': 40, 'unf': 24, 'nb': 16, 'scale': scale_factor}
-    # return PAN(**opt)
 
 
 if __name__ == "__main__":

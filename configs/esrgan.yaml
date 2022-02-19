@@ -1,6 +1,6 @@
 # global settings
 seed: 42
-logs_dir: './model_logs'
+logs_dir: './mnt/model_logs'
 save_interval: 5
 sample_interval: 50
 run_name: esrgan
@@ -10,9 +10,9 @@ num_epochs: 100
 
 # dataset settings
 num_workers: 0
-dataset_dir: 'C:\\Users\\Dymok\\Desktop\\text-rsisr\\data\\text_zoom'
-lr_img_size: !!python/tuple [32, 128] # hxw
-hr_img_size: !!python/tuple [64, 256] # hxw
+dataset_dir: 'data/text_zoom'
+lr_img_size: !!python/tuple [16, 64] # hxw
+hr_img_size: !!python/tuple [32, 128] # hxw
 val_split_complexity: easy
 test_split_complexity: medium
 
@@ -25,12 +25,5 @@ lr: 0.0002
 # ckpt_path: model_logs\esrgan\checkpoints\epoch-1.pth
 model:
   type: ESRGAN
-  num_rrdb_blocks: 11
+  num_rrdb_blocks: 23
   warmup_iters: 500 # how many iters to train only generator with pixel loss
-
-# schedulers:
-  # - # generator's scheduler
-  #   type: torch.optim.lr_scheduler.MultiStepLR
-  #   milestones: [8, 16, 24, 32]
-  #   gamma: 0.5
-

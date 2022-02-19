@@ -7,13 +7,14 @@ import numpy as np
 from torch import nn
 from torch.nn import functional as F
 from torchmetrics.functional import ssim, psnr
+from torchvision.transforms import Normalize, ToTensor, Compose, Resize, InterpolationMode
 
 from src import models
 from src.datamodule import denormalize
 from src.models.core.esrgan.models import FeatureExtractor, GeneratorRRDB, Discriminator
 from src.utils.config_reader import Config, object_from_dict
 from src.models.base import SuperResolutionModel
-from torchvision.transforms import Normalize, ToTensor, Compose, Resize, InterpolationMode
+from src.losses.gradient_prior import GradientPriorLoss
 
 
 class ESRGAN(SuperResolutionModel):
@@ -24,7 +25,7 @@ class ESRGAN(SuperResolutionModel):
 
         self.means, self.stds = torch.Tensor(config.norm_means).to(self.cfg.device), torch.Tensor(config.norm_stds).to(self.cfg.device)
         self._prepr_op = Compose([
-            Resize(self.cfg.hr_img_size, InterpolationMode.BICUBIC),
+            Resize(self.cfg.lr_img_size, InterpolationMode.BICUBIC),
             ToTensor(),
             Normalize(self.means, self.stds),
         ])
@@ -42,8 +43,10 @@ class ESRGAN(SuperResolutionModel):
         self.adv_loss = nn.BCEWithLogitsLoss()
         self.content_loss = nn.L1Loss()
         self.pixel_loss = nn.L1Loss()
+        self.gp_loss = GradientPriorLoss()
         self.alpha_adv = 5e-3
         self.alpha_pixel = 1e-2
+        self.alpha_gp = 1e-6
         self._warmup_iters = kwargs.get('warmup_iters', 500)
 
         self.global_step = 0
@@ -95,6 +98,8 @@ class ESRGAN(SuperResolutionModel):
         if self.global_step < self._warmup_iters:
             return pixel_loss, fake_imgs, {'loss_G_pixel': pixel_loss.item()}
 
+        gp_loss = self.gp_loss(fake_imgs, y)
+
         # optimize the generator to make discriminator think the fake samples are real
         real_preds = self.discriminator(y).detach()
         fake_preds = self.discriminator(fake_imgs)
@@ -105,11 +110,12 @@ class ESRGAN(SuperResolutionModel):
         fake_feats = self.feature_extractor(fake_imgs)
         content_loss = self.content_loss(fake_feats, real_feats)
         
-        gen_loss = self.alpha_pixel * pixel_loss + self.alpha_adv * adv_loss + content_loss
+        gen_loss = self.alpha_pixel * pixel_loss + self.alpha_gp * gp_loss + self.alpha_adv * adv_loss + content_loss
 
         logs = OrderedDict((
             ('loss_G', gen_loss.item()),
             ('loss_G_pixel', pixel_loss.item()),
+            ('loss_G_gp', gp_loss.item()),
             ('loss_G_content', content_loss.item()),
         ))
         return gen_loss, fake_imgs, logs
@@ -147,7 +153,11 @@ class ESRGAN(SuperResolutionModel):
 
         logs = OrderedDict((
             ('losses', gen_logs.copy()),
-            ('images', OrderedDict({'G_images': fake_imgs})),
+            ('images', OrderedDict((
+                ('LR', batch[0]),
+                ('HR', batch[1]),
+                ('G', fake_imgs),
+            ))),
         ))
 
         if self.global_step >= self._warmup_iters:
@@ -168,7 +178,11 @@ class ESRGAN(SuperResolutionModel):
 
         logs = OrderedDict((
             ('losses', gen_logs.copy()),
-            ('images', OrderedDict({'G_images': fake_imgs})),
+            ('images', OrderedDict((
+                ('LR', batch[0]),
+                ('HR', batch[1]),
+                ('G', fake_imgs),
+            ))),
         ))
 
         if self.global_step >= self._warmup_iters:

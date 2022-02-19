@@ -117,7 +117,8 @@ class Trainer:
 
     def fit(self, train_loader, val_loader):
         self.vis.reset()
-        self.validation_epoch(val_loader)
+        if self.current_epoch != 0:
+            self.validation_epoch(val_loader)
         for epoch in range(self.current_epoch, self.num_epochs):
             self.current_epoch = epoch
             self.training_epoch(train_loader)

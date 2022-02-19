@@ -3,7 +3,7 @@ seed: 42
 logs_dir: './mnt/model_logs'
 save_interval: 1
 sample_interval: 50
-run_name: pseudosr_rcan
+run_name: pseudosr_esrgan
 
 device: cuda:0
 
@@ -15,16 +15,17 @@ hr_img_size: !!python/tuple [32, 128] # hxw
 val_split_complexity: easy
 test_split_complexity: medium
 
-# -0.5 to 0.5 normalization
-norm_means: [0.5, 0.5, 0.5]
+# normalization
+norm_means: [0.0, 0.0, 0.0]
 norm_stds: [1.0, 1.0, 1.0]
 
 # training settings
 num_epochs: 60
-batch_size: 32
+batch_size: 4
 lr: 0.0001
 lr_milestones: [20, 38, 50, 55]
 # ckpt_path: model_logs\pseudosr\checkpoints\epoch-56.pth
 
 model:
-  type: PseudoModel
+  type: PseudoModelESRGAN
+  warmup_iters: 500 # how many iters to train only generator with pixel loss
