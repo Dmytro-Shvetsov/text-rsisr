@@ -3,7 +3,7 @@ seed: 42
 logs_dir: './mnt/model_logs'
 save_interval: 5
 sample_interval: 50
-run_name: esrgan
+run_name: inter
 
 device: cuda:0
 num_epochs: 100
@@ -19,11 +19,8 @@ test_split_complexity: medium
 norm_means: [0.0, 0.0, 0.0]
 norm_stds: [1.0, 1.0, 1.0]
 
-# train settings
-batch_size: 16
-lr: 0.0002
-# ckpt_path: model_logs\esrgan\checkpoints\epoch-1.pth
+batch_size: 8
+
 model:
-  type: ESRGAN
-  num_rrdb_blocks: 23
-  warmup_iters: 500 # how many iters to train only generator with pixel loss
+  type: InterpolationModel
+  mode: bicubic
