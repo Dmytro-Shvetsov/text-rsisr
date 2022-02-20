@@ -199,7 +199,7 @@ class SPSRModel(BaseModel):
             # D_grad
             wd_D_grad = train_opt['weight_decay_D'] if train_opt['weight_decay_D'] else 0
             self.optimizer_D_grad = torch.optim.Adam(self.netD_grad.parameters(), lr=train_opt['lr_D'], \
-                weight_decay=wd_D, betas=(train_opt['beta1_D'], 0.999))
+                weight_decay=wd_D_grad, betas=(train_opt['beta1_D'], 0.999))
 
             self.optimizers.append(self.optimizer_D_grad)
 
@@ -234,7 +234,6 @@ class SPSRModel(BaseModel):
         for p in self.netD_grad.parameters():
             p.requires_grad = False
 
-        # print(step, self.Branch_init_iters)
         if(self.Branch_pretrain): 
             if(step < self.Branch_init_iters):
                 for k,v in self.netG.named_parameters():
@@ -253,8 +252,9 @@ class SPSRModel(BaseModel):
         self.var_H_grad = self.get_grad(self.var_H)
         self.var_ref_grad = self.get_grad(self.var_ref)
         self.var_H_grad_nopadding = self.get_grad_nopadding(self.var_H)
-        
+        print(self.Branch_init_iters, self.D_init_iters, step)
 
+        self.netF.eval()
         l_g_total = 0
         if step % self.D_update_ratio == 0 and step > self.D_init_iters:
             if self.cri_pix:  # pixel loss
@@ -280,8 +280,8 @@ class SPSRModel(BaseModel):
             pred_g_fake = self.netD(self.fake_H)
             pred_d_real = self.netD(self.var_ref).detach()
             
-            l_g_gan = self.l_gan_w * (self.cri_gan(pred_d_real - torch.mean(pred_g_fake, 0, keepdims=True), False) +
-                                    self.cri_gan(pred_g_fake - torch.mean(pred_d_real, 0, keepdims=True), True)) / 2
+            l_g_gan = self.l_gan_w * (self.cri_gan(pred_d_real - torch.mean(pred_g_fake), False) +
+                                    self.cri_gan(pred_g_fake - torch.mean(pred_d_real), True)) / 2
             l_g_total += l_g_gan
 
             # grad G gan + cls loss
@@ -289,8 +289,8 @@ class SPSRModel(BaseModel):
             pred_g_fake_grad = self.netD_grad(self.fake_H_grad)
             pred_d_real_grad = self.netD_grad(self.var_ref_grad).detach()
 
-            l_g_gan_grad = self.l_gan_grad_w * (self.cri_grad_gan(pred_d_real_grad - torch.mean(pred_g_fake_grad, 0, keepdims=True), False) + 
-                                                self.cri_grad_gan(pred_g_fake_grad - torch.mean(pred_d_real_grad, 0, keepdims=True), True)) /2
+            l_g_gan_grad = self.l_gan_grad_w * (self.cri_grad_gan(pred_d_real_grad - torch.mean(pred_g_fake_grad), False) + 
+                                                self.cri_grad_gan(pred_g_fake_grad - torch.mean(pred_d_real_grad), True)) /2
             l_g_total += l_g_gan_grad
 
 
@@ -306,8 +306,9 @@ class SPSRModel(BaseModel):
         l_d_total = 0
         pred_d_real = self.netD(self.var_ref)
         pred_d_fake = self.netD(self.fake_H.detach())  # detach to avoid BP to G
-        l_d_real = self.cri_gan(pred_d_real - torch.mean(pred_d_fake, 0, keepdims=True), True)
-        l_d_fake = self.cri_gan(pred_d_fake - torch.mean(pred_d_real, 0, keepdims=True), False)
+
+        l_d_real = self.cri_gan(pred_d_real - torch.mean(pred_d_fake), True)
+        l_d_fake = self.cri_gan(pred_d_fake - torch.mean(pred_d_real), False)
 
         l_d_total = (l_d_real + l_d_fake) / 2
 
@@ -326,7 +327,6 @@ class SPSRModel(BaseModel):
 
         self.optimizer_D.step()
 
-        
         for p in self.netD_grad.parameters():
             p.requires_grad = True
 
@@ -337,14 +337,12 @@ class SPSRModel(BaseModel):
         pred_d_real_grad = self.netD_grad(self.var_ref_grad)
         pred_d_fake_grad = self.netD_grad(self.fake_H_grad.detach())  # detach to avoid BP to G
         
-        l_d_real_grad = self.cri_grad_gan(pred_d_real_grad - torch.mean(pred_d_fake_grad, 0, keepdims=True), True)
-        l_d_fake_grad = self.cri_grad_gan(pred_d_fake_grad - torch.mean(pred_d_real_grad, 0, keepdims=True), False)
+        l_d_real_grad = self.cri_grad_gan(pred_d_real_grad - torch.mean(pred_d_fake_grad), True)
+        l_d_fake_grad = self.cri_grad_gan(pred_d_fake_grad - torch.mean(pred_d_real_grad), False)
 
         l_d_total_grad = (l_d_real_grad + l_d_fake_grad) / 2
         l_d_total_grad.backward()
         self.optimizer_D_grad.step()
-        
-        
 
         # set log
         if step % self.D_update_ratio == 0 and step > self.D_init_iters:
@@ -371,10 +369,9 @@ class SPSRModel(BaseModel):
         # D outputs
         # self.log_dict['D_real'] = torch.mean(pred_d_real.detach())
         # self.log_dict['D_fake'] = torch.mean(pred_d_fake.detach())
-
         # D_grad outputs
-        self.log_dict['D_real_grad'] = torch.mean(pred_d_real_grad.detach())
-        self.log_dict['D_fake_grad'] = torch.mean(pred_d_fake_grad.detach())
+        # self.log_dict['D_real_grad'] = torch.mean(pred_d_real_grad.detach())
+        # self.log_dict['D_fake_grad'] = torch.mean(pred_d_fake_grad.detach())
         return self.log_dict, (self.fake_H_branch, self.fake_H, self.grad_LR)
 
     def test(self):

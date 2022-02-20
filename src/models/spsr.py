@@ -66,7 +66,7 @@ opt = {
     , "pixel_branch_criterion": "l1"
     , "pixel_branch_weight": 5e-1
     , "Branch_pretrain" : 1
-    , "Branch_init_iters" : 300
+    , "Branch_init_iters" : 4000
 
     , "manual_seed": 9
     , "niter": 5e5
@@ -133,19 +133,10 @@ class SPSR(SuperResolutionModel):
 
         logs = OrderedDict()
         logs['losses'] = losses
-        images['fake_H'] = fake_imgs[1]
         images['grad_LR'] = fake_imgs[2]
-        images['G'] = fake_imgs[0]
+        images['fake_H'] = fake_imgs[0]
+        images['G'] = fake_imgs[1]
         logs['images'] = images
-        
-        # logs = OrderedDict((
-        #     ('losses', loss_dict),
-        #     ('images', OrderedDict((
-        #         ('LR', Xs),
-        #         ('HR', Ys),
-        #         ('U', sr_y),
-        #     ))),
-        # ))
         self.global_step += 1
         return logs
 
@@ -156,15 +147,15 @@ class SPSR(SuperResolutionModel):
         logs = OrderedDict((
             ('losses', OrderedDict()),
             ('metrics', OrderedDict((
-                ('U_PSNR', psnr(fake_imgs[0], y)),
-                ('U_SSIM', ssim(fake_imgs[0], y)),
+                ('U_PSNR', psnr(fake_imgs[1], y)),
+                ('U_SSIM', ssim(fake_imgs[1], y)),
             ))),
             ('images', OrderedDict((
                 ('LR', x),
                 ('HR', y),
-                ('fake_H', fake_imgs[1]),
                 ('grad_LR', fake_imgs[2]),
-                ('G', fake_imgs[0]),
+                ('fake_H', fake_imgs[0]),
+                ('G', fake_imgs[1]),
             ))),
         ))
         return logs

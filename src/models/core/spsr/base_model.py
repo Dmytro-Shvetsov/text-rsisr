@@ -4,8 +4,9 @@ import torch.nn as nn
 import pdb
 
 
-class BaseModel():
+class BaseModel(nn.Module):
     def __init__(self, opt):
+        super().__init__()
         self.opt = opt
         self.device = torch.device('cuda' if opt['gpu_ids'] is not None else 'cpu')
         self.is_train = opt.get('is_train', True)

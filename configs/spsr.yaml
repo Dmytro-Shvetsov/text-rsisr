@@ -1,7 +1,7 @@
 # global settings
 seed: 42
 logs_dir: './mnt/model_logs'
-save_interval: 5
+save_interval: 1
 sample_interval: 50
 run_name: spsr
 
@@ -20,9 +20,9 @@ norm_means: [0.0, 0.0, 0.0]
 norm_stds: [1.0, 1.0, 1.0]
 
 # train settings
-batch_size: 16
+batch_size: 32
 lr: 0.0001
 lr_milestones: [20, 38, 50, 55]
-# ckpt_path: model_logs\esrgan\checkpoints\epoch-1.pth
+# ckpt_path: mnt/model_logs/spsr/checkpoints/epoch-13.pth
 model:
   type: SPSR

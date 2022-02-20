@@ -38,6 +38,8 @@ class Trainer:
         self.sample_interval = self.config.get('sample_interval', 1)
 
     def training_epoch(self, train_loader):
+        self.global_step = len(train_loader) * self.current_epoch
+        self.model.global_step = self.global_step
         self.model.train()
         loss_avg_meter = AverageMeter()
         for i, batch in enumerate(train_loader):
@@ -109,8 +111,6 @@ class Trainer:
         if ckpt_path:
             ckpt = torch.load(ckpt_path, self.device)
             self.current_epoch = ckpt['current_epoch']
-            self.global_step = self.batch_size * self.current_epoch
-            self.model.global_step = self.global_step
             self.model.load_state_dict(ckpt['state_dict'])
             self.logger.info(f'Successfully restored checkpoint {repr(ckpt_path)}. Continuing epoch {self.current_epoch}...')
         self.model.to(self.device)

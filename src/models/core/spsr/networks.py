@@ -103,7 +103,7 @@ from src.models.core.pseudosr.discriminators import NLayerDiscriminator
 def define_D(opt):
     opt_net = opt['network_D']
     which_model = opt_net['which_model_D']
-    return NLayerDiscriminator(3, n_layers=5, scale_factor=1)
+    # return NLayerDiscriminator(3, n_layers=5, scale_factor=1)
     if which_model == 'discriminator_vgg_128':
         netD = arch.Discriminator_VGG_128(in_nc=opt_net['in_nc'], base_nf=opt_net['nf'], \
             norm_type=opt_net['norm_type'], mode=opt_net['mode'], act_type=opt_net['act_type'])
@@ -121,14 +121,12 @@ def define_D(opt):
 
     init_weights(netD, init_type='kaiming', scale=1)
 
-    netD = nn.DataParallel(netD)
     return netD
 
 def define_D_grad(opt):
-    gpu_ids = opt['gpu_ids']
     opt_net = opt['network_D']
     which_model = opt_net['which_model_D']
-    return NLayerDiscriminator(3, n_layers=5, scale_factor=1)
+    # return NLayerDiscriminator(3, scale_factor=1)
     if which_model == 'discriminator_vgg_128':
         netD = arch.Discriminator_VGG_128(in_nc=opt_net['in_nc'], base_nf=opt_net['nf'], \
             norm_type=opt_net['norm_type'], mode=opt_net['mode'], act_type=opt_net['act_type'])
@@ -144,10 +142,8 @@ def define_D_grad(opt):
     else:
         raise NotImplementedError('Discriminator model [{:s}] not recognized'.format(which_model))
 
-
     init_weights(netD, init_type='kaiming', scale=1)
 
-    netD = nn.DataParallel(netD)
     return netD
 
 
@@ -161,7 +157,5 @@ def define_F(opt, use_bn=False):
         feature_layer = 34
     netF = arch.VGGFeatureExtractor(feature_layer=feature_layer, use_bn=use_bn, \
         use_input_norm=True, device=device)
-    if gpu_ids:
-        netF = nn.DataParallel(netF)
     netF.eval()  
     return netF
